@@ -1,6 +1,7 @@
 import os
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -8,9 +9,21 @@ def _build_database_url() -> str:
     host = os.environ.get("POSTGRES_HOST", "postgres")
     port = os.environ.get("POSTGRES_PORT", "5432")
     user = os.environ.get("POSTGRES_USER", "postgres")
-    password = os.environ.get("POSTGRES_PASSWORD", "postgres")
     db = os.environ.get("APP_DB_NAME", "mem0_app")
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db}"
+    if host.startswith("/"):
+        # libpq accepts a socket directory through the query's host parameter.
+        url = URL.create(
+            "postgresql+psycopg", username=user,
+            password=os.environ.get("POSTGRES_PASSWORD"), database=db,
+            query={"host": host, "port": port},
+        )
+    else:
+        url = URL.create(
+            "postgresql+psycopg", username=user,
+            password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
+            host=host, port=int(port), database=db,
+        )
+    return url.render_as_string(hide_password=False)
 
 
 engine = create_engine(_build_database_url(), pool_pre_ping=True)
